@@ -772,6 +772,51 @@ def fmt_size(size) -> str:
     if size >= 1024 ** 2: return f"{size / 1024 ** 2:.1f} MB"
     return f"{size / 1024:.0f} KB"
 
+LOGO_SVG = r'''<svg xmlns="http://www.w3.org/2000/svg" width="860" height="160" viewBox="0 0 860 160">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#60A5FA"/>
+      <stop offset="1" stop-color="#1D4ED8"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E8EFFD"/>
+      <stop offset="1" stop-color="#DBE7FB"/>
+    </linearGradient>
+  </defs>
+  <g transform="scale(0.3125)">
+    <rect x="0" y="0" width="512" height="512" rx="112" fill="url(#bg)"/>
+    <rect x="150" y="82" width="212" height="348" rx="44" fill="#0B1020" opacity="0.92"/>
+    <rect x="166" y="112" width="180" height="288" rx="18" fill="url(#screen)"/>
+    <circle cx="256" cy="96" r="5" fill="#60A5FA"/>
+    <rect x="186" y="140" width="62" height="62" rx="16" fill="#2563EB"/>
+    <rect x="264" y="140" width="62" height="62" rx="16" fill="#60A5FA"/>
+    <rect x="186" y="218" width="62" height="62" rx="16" fill="#60A5FA"/>
+    <rect x="264" y="218" width="62" height="62" rx="16" fill="#2563EB"/>
+    <rect x="216" y="352" width="80" height="8" rx="4" fill="#60A5FA"/>
+    <g transform="translate(372 372)">
+      <circle r="46" fill="#FFFFFF"/>
+      <circle r="22" fill="none" stroke="#2563EB" stroke-width="14"/>
+      <g fill="#2563EB">
+        <rect x="-7" y="-40" width="14" height="22" rx="4"/>
+        <rect x="-7" y="18" width="14" height="22" rx="4"/>
+        <rect x="-40" y="-7" width="22" height="14" rx="4"/>
+        <rect x="18" y="-7" width="22" height="14" rx="4"/>
+      </g>
+    </g>
+  </g>
+  <text x="190" y="98" font-family="Segoe UI, Inter, Helvetica, Arial, sans-serif" font-size="72" font-weight="700" fill="#2563EB">Manager<tspan fill="#0B1020">Droid</tspan></text>
+</svg>'''
+
+def logo_pixmap(height: int, dark: bool) -> QPixmap:
+    """Renderiza o logotipo com nítido em telas de alta densidade. No tema escuro, o nome usa cor clara."""
+    p = PALETTES['dark' if dark else 'light']
+    svg = LOGO_SVG.replace('#0B1020', p['text']) if dark else LOGO_SVG
+    width = round(height * 860 / 160); scale = 2
+    pix = QPixmap(width * scale, height * scale); pix.fill(Qt.transparent)
+    painter = QPainter(pix); QSvgRenderer(QByteArray(svg.encode('utf-8'))).render(painter); painter.end()
+    pix.setDevicePixelRatio(scale)
+    return pix
+
 @functools.lru_cache(maxsize=512)
 def svg_pixmap(name: str, color: str, size: int = 18) -> QPixmap | None:
     raw = ICON_SVGS.get(name)
@@ -1165,7 +1210,9 @@ class ManagerDroid(QMainWindow):
 
         top = QWidget(); top.setObjectName("TopBar"); top.setFixedHeight(64)
         tl = QHBoxLayout(top); tl.setContentsMargins(20, 0, 16, 0); tl.setSpacing(10)
-        brand = QLabel(APP_NAME); brand.setObjectName("Brand"); tl.addWidget(brand)
+        brand = QLabel(); brand.setPixmap(logo_pixmap(36, bool(SETTINGS.get("dark", True))))
+        brand.setToolTip(APP_NAME); tl.addWidget(brand)
+        self.brand_label = brand
         tl.addStretch(1)
         tl.addWidget(QLabel(t("Dispositivo")))
         self.device_combo = NoWheelComboBox(); self.device_combo.setMinimumWidth(300)
@@ -1737,6 +1784,8 @@ class ManagerDroid(QMainWindow):
         try:
             self.setStyleSheet(qss)
             self._refresh_icons()
+            if hasattr(self, "brand_label"):
+                self.brand_label.setPixmap(logo_pixmap(36, self.dark))
         finally:
             self.setUpdatesEnabled(True)
 
