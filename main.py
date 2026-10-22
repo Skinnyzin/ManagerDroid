@@ -876,7 +876,7 @@ class Worker(QThread):
         try: self.done.emit(self.fn(), None)
         except Exception as e: self.done.emit(None, str(e) or repr(e))
 
-HELPER_APK_URL = "https://github.com/Skinnyzin/ManagerDroid-Help/releases/download/managerdroidhelper02/ManagerDroid-Helper.apk"
+HELPER_APK_URL = "https://github.com/Skinnyzin/ManagerDroid-Help/releases/download/managerdroid1/ManagerDroid-Helper.apk"
 HELPER_DOWNLOAD_REMOTE = "/sdcard/Download/ManagerDroid-Helper.apk"
 
 def download_helper_apk(progress=None) -> str:
