@@ -1,8 +1,16 @@
 $ErrorActionPreference = "Stop"
+Set-Location $PSScriptRoot
+
+$icon = "icone.ico"
+if (-not (Test-Path $icon)) { throw "Arquivo $icon não encontrado na pasta do projeto." }
+
 py -m pip install --upgrade pip
 py -m pip install -r requirements.txt pyinstaller
-pyinstaller --noconfirm --clean --windowed --name ManagerDroid main.py
+
+# --icon: ícone do .exe | --add-data: inclui o .ico dentro do programa (ícone da janela)
+py -m PyInstaller --noconfirm --clean --windowed --name ManagerDroid `
+    --icon $icon --add-data "$icon;." main.py
+
 Write-Host ""
 Write-Host "Build concluído. Executável em dist\ManagerDroid\ManagerDroid.exe"
-Write-Host "Observação: mantenha ManagerDroid-Helper.apk ao lado do executável se o código precisar localizar esse arquivo em tempo de execução."
-Write-Host "ADB/fastboot/scrcpy devem estar no PATH ou nas pastas esperadas pelo programa."
+Write-Host "O ADB e o scrcpy são baixados automaticamente na primeira vez que forem necessários."

@@ -1154,6 +1154,8 @@ class ManagerDroid(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(APP_NAME)
+        _icon_file = BASE_DIR / "icone.ico"
+        if _icon_file.is_file(): self.setWindowIcon(QIcon(str(_icon_file)))
         self.resize(1200, 780); self.setMinimumSize(1020, 660)
         self.dark = bool(SETTINGS.get("dark", True))
         self.device: str | None = None
