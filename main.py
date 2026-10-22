@@ -23,6 +23,10 @@ from PySide6.QtWidgets import (
 APP_NAME = "ManagerDroid"
 BASE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 DATA_DIR = Path(__file__).resolve().parent
+if getattr(sys, "frozen", False):
+    # Executável --onefile: __file__ aponta para a pasta temporária, apagada ao fechar o programa.
+    # Ferramentas baixadas (adb, scrcpy) ficam numa pasta fixa do usuário e não são baixadas de novo.
+    DATA_DIR = Path(os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or str(Path.home())) / "ManagerDroid"
 LOG_DIR = DATA_DIR / "logs"
 LOG_FILE = LOG_DIR / "droidcontrol.log"
 # Cache em diretório gravável do usuário (não falha quando o app está em Program Files).
