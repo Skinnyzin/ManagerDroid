@@ -2,6 +2,10 @@
   <img src="branding/managerdroid-logo.svg" alt="ManagerDroid" width="420">
 </p>
 
+# ManagerDroid
+
+🇧🇷 Português · [🇺🇸 English](README.en.md)
+
 Gerenciador de dispositivos Android para Windows, feito em Python (PySide6) sobre o **ADB**. Permite acompanhar o aparelho, gerenciar aplicativos, remover apps do sistema, espelhar a tela e executar ferramentas do dia a dia, tudo por uma interface em português ou inglês.
 
 > Não exige root. Funciona com depuração USB (ou ADB sem fio) habilitada no aparelho.
@@ -188,6 +192,14 @@ Arquivos gerados em tempo de execução (não versionar):
 ---
 
 ## Agradecimentos
-Agradeço imensamente o Genymobile (criador do scrcpy) por disponibilizar esta ferramenta, se não fosse por ele, o programa não teria funcionalidades incríveis <3
 
-## Licença: MIT
+- **ADB (Android Debug Bridge)**: ferramenta de linha de comando criada pela equipe do Android, da Google, e distribuída nos [Android Platform Tools](https://developer.android.com/tools/releases/platform-tools). Sem ela, o ManagerDroid não conversaria com o aparelho.
+- **scrcpy**: criado por Romain Vimont e mantido pela [Genymobile](https://github.com/Genymobile/scrcpy), que permite espelhar e controlar a tela do Android pelo computador. Sua licença e seus créditos estão no [repositório oficial](https://github.com/Genymobile/scrcpy).
+
+---
+
+## Licença
+
+Defina a licença antes de publicar (por exemplo, MIT) e inclua o arquivo `LICENSE`.
+
+Ferramentas de terceiros (Platform Tools, scrcpy, ícones) mantêm suas próprias licenças. Consulte o arquivo `NOTICE`, se existir.
