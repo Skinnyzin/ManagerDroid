@@ -195,6 +195,7 @@ Arquivos gerados em tempo de execução (não versionar):
 
 - **ADB (Android Debug Bridge)**: ferramenta de linha de comando criada pela equipe do Android, da Google, e distribuída nos [Android Platform Tools](https://developer.android.com/tools/releases/platform-tools). Sem ela, o ManagerDroid não conversaria com o aparelho.
 - **scrcpy**: criado por Romain Vimont e mantido pela [Genymobile](https://github.com/Genymobile/scrcpy), que permite espelhar e controlar a tela do Android pelo computador. Sua licença e seus créditos estão no [repositório oficial](https://github.com/Genymobile/scrcpy).
+Se não fosse por eles, o programa não teria todas estas funcionalidades (Obrigado <3)
 
 ---
 
