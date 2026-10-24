@@ -659,23 +659,37 @@ def _send_helper_broadcast(adb):
 
 def _fetch_new_apps(adb, new, index, timeout):
     """Pede ao helper nome e ícone somente dos pacotes novos e os grava no índice."""
+    # Concede o acesso a arquivos ao helper pelo adb (Android 11+), só quando realmente for buscar.
+    try: run_command(adb + ["shell", "appops", "set", HELPER_PKG, "MANAGE_EXTERNAL_STORAGE", "allow"], 20)
+    except Exception: pass
+    try:
+        status = run_command(adb + ["shell", "appops", "get", HELPER_PKG, "MANAGE_EXTERNAL_STORAGE"], 20)
+        if "MANAGE_EXTERNAL_STORAGE" in status and "allow" not in status.lower():
+            raise PermissionError(t("Permissão de arquivos não concedida ao helper. Abra o ManagerDroid Helper no aparelho e toque em 'Permitir acesso a arquivos'.") + f" [{status}]")
+    except PermissionError: raise
+    except Exception: pass
     request_file = Path(tempfile.gettempdir()) / "droicontrol_request.txt"
     request_file.write_text("\n".join(new) + "\n", encoding="utf-8")
     run_command(adb + ["push", str(request_file), f"{HELPER_REMOTE}/request.txt"], 60)
     run_command(adb + ["shell", "rm", "-f", f"{HELPER_REMOTE}/apps.json", f"{HELPER_REMOTE}/error.txt",
                        f"{HELPER_REMOTE}/icons.zip"], 30)
     _send_helper_broadcast(adb)
-    deadline, text = time.time() + timeout, ""
+    # Uma única consulta por tentativa: devolve o erro (se houver) ou o apps.json (quando pronto).
+    probe = (f"if [ -f {HELPER_REMOTE}/error.txt ]; then echo __MD_ERR__; cat {HELPER_REMOTE}/error.txt; "
+             f"elif [ -f {HELPER_REMOTE}/apps.json ]; then cat {HELPER_REMOTE}/apps.json; fi")
+    deadline, text, delay = time.time() + timeout, "", 0.2
     while time.time() < deadline:
-        time.sleep(1)
-        err = ""
-        try: err = run_command(adb + ["shell", f"if [ -f {HELPER_REMOTE}/error.txt ]; then cat {HELPER_REMOTE}/error.txt; fi"], 15)
-        except Exception: pass
-        if err: raise RuntimeError(err)
-        try: text = run_command(adb + ["shell", f"if [ -f {HELPER_REMOTE}/apps.json ]; then cat {HELPER_REMOTE}/apps.json; fi"], 60)
-        except Exception: text = ""
-        if text.strip(): break
-    else:
+        try:
+            out = run_command(adb + ["shell", probe], 60)
+        except Exception:
+            out = ""
+        if out.startswith("__MD_ERR__"):
+            raise RuntimeError(out[len("__MD_ERR__"):].strip())
+        if out.strip():
+            text = out; break
+        time.sleep(delay)
+        delay = min(delay * 1.5, 0.8)
+    if not text:
         raise RuntimeError(t("O ManagerDroid Helper não respondeu. Abra o app ManagerDroid Helper no celular uma vez e tente de novo."))
 
     raw = json.loads(text)
@@ -732,21 +746,11 @@ def helper_export(adb, timeout=180):
     2) Sem app novo desde a última vez: não contata o helper; usa o índice salvo.
     3) Com app novo: pede nome e ícone somente desses apps.
     Retorna None se o helper não estiver instalado; senão (entradas, pacotes_novos)."""
-    if HELPER_PKG not in run_command(adb + ["shell", "pm", "list", "packages", HELPER_PKG], 30):
-        return None
-    # Concede o acesso a arquivos ao helper pelo adb (Android 11+), sem precisar tocar no aparelho
-    try: run_command(adb + ["shell", "appops", "set", HELPER_PKG, "MANAGE_EXTERNAL_STORAGE", "allow"], 20)
-    except Exception: pass
-    try:
-        status = run_command(adb + ["shell", "appops", "get", HELPER_PKG, "MANAGE_EXTERNAL_STORAGE"], 20)
-        if "MANAGE_EXTERNAL_STORAGE" in status and "allow" not in status.lower():
-            raise PermissionError(t("Permissão de arquivos não concedida ao helper. Abra o ManagerDroid Helper no aparelho e toque em 'Permitir acesso a arquivos'.") + f" [{status}]")
-    except PermissionError: raise
-    except Exception: pass
-
     installed = _installed_packages(adb)
     if not installed:
         raise RuntimeError("não foi possível listar os aplicativos instalados")
+    if HELPER_PKG not in installed:
+        return None
     index = _load_app_index()
     # Apps desinstalados saem do índice e do disco.
     for pkg in [p for p in index if p not in installed]:
@@ -775,6 +779,9 @@ def fmt_size(size) -> str:
     if size >= 1024 ** 3: return f"{size / 1024 ** 3:.2f} GB"
     if size >= 1024 ** 2: return f"{size / 1024 ** 2:.1f} MB"
     return f"{size / 1024:.0f} KB"
+
+_ICON_MEMO = {}
+FALLBACK_ICON = BASE_DIR / "android_fallback.png"
 
 LOGO_SVG = r'''<svg xmlns="http://www.w3.org/2000/svg" width="860" height="160" viewBox="0 0 860 160">
   <defs>
@@ -853,6 +860,30 @@ def load_label_cache() -> dict:
             continue
     return {}
 
+APPS_SNAPSHOT_DIR = CACHE_DIR / "snapshots"
+
+def _snapshot_file(serial: str) -> Path:
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", serial or "device")
+    return APPS_SNAPSHOT_DIR / f"{safe}.json"
+
+def _read_apps_snapshot(serial: str):
+    """Última lista de apps salva para este aparelho, ou None."""
+    try:
+        data = json.loads(_snapshot_file(serial).read_text(encoding="utf-8"))
+        return data if isinstance(data, list) and data else None
+    except (OSError, ValueError):
+        return None
+
+def _write_apps_snapshot(serial: str, rows: list):
+    try:
+        APPS_SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
+        target = _snapshot_file(serial)
+        tmp = target.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(rows, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(target)
+    except OSError:
+        pass
+
 def save_label_cache(data: dict):
     try:
         LABEL_CACHE.parent.mkdir(parents=True, exist_ok=True)
@@ -880,7 +911,7 @@ class Worker(QThread):
         try: self.done.emit(self.fn(), None)
         except Exception as e: self.done.emit(None, str(e) or repr(e))
 
-HELPER_APK_URL = "https://github.com/Skinnyzin/ManagerDroid-Help/releases/download/managerdroid10/ManagerDroid-Helper.apk"
+HELPER_APK_URL = "https://github.com/Skinnyzin/ManagerDroid-Help/releases/download/managerdroid11/ManagerDroid-Helper.apk"
 HELPER_DOWNLOAD_REMOTE = "/sdcard/Download/ManagerDroid-Helper.apk"
 
 def download_helper_apk(progress=None) -> str:
@@ -2253,16 +2284,23 @@ class ManagerDroid(QMainWindow):
         self._helper_device = None; self._helper_absent = None
         self.apps_table.setRowCount(0)
         self.statusBar().showMessage(t("Carregando aplicativos…"))
+        serial = self.device
         def pm(*args): return run_command(adb + ["shell", "pm", "list", "packages", *args], 120)
         def work():
+            # Uma única chamada ao aparelho para as quatro listas (cada chamada ao adb abre um processo).
+            sep = "__MD_SEP__"
+            combined = run_command(adb + ["shell",
+                "pm list packages -f; echo " + sep + "; pm list packages -d; echo " + sep +
+                "; pm list packages -u; echo " + sep + "; pm list packages -3"], 120)
+            parts = (combined.split(sep) + ["", "", "", ""])[:4]
             installed = {}
-            for line in pm("-f").splitlines():
+            for line in parts[0].splitlines():
                 if line.startswith("package:") and "=" in line:
                     path, pkg = line[len("package:"):].rsplit("=", 1)
                     installed[pkg.strip()] = path.strip()
-            disabled = {x.replace("package:", "").strip() for x in pm("-d").splitlines() if x.strip()}
-            every = {x.replace("package:", "").strip() for x in pm("-u").splitlines() if x.strip()}
-            user = {x.replace("package:", "").strip() for x in pm("-3").splitlines() if x.strip()}
+            disabled = {x.replace("package:", "").strip() for x in parts[1].splitlines() if x.strip()}
+            every = {x.replace("package:", "").strip() for x in parts[2].splitlines() if x.strip()}
+            user = {x.replace("package:", "").strip() for x in parts[3].splitlines() if x.strip()}
             sizes, batch, length = {}, [], 0
             def flush():
                 if not batch: return
@@ -2288,7 +2326,18 @@ class ManagerDroid(QMainWindow):
                     state = "Desativados" if pkg in disabled else "Ativados"
                     rows.append({"pkg": pkg, "state": state, "size": sizes.get(installed[pkg]), "user": pkg in user, "path": installed[pkg]})
             return rows
-        self.run_async(work, self._apps_result)
+        # Mostra a última lista salva na hora; a atualização do aparelho substitui depois.
+        cached_rows = _read_apps_snapshot(serial)
+        if cached_rows:
+            self._apps_result(cached_rows, None)
+            self._apps_loading = True
+            if hasattr(self, "apps_refresh_btn"): self.apps_refresh_btn.setEnabled(False)
+            self.statusBar().showMessage(t("Mostrando lista salva; atualizando…"))
+        def finished(rows, error):
+            if not error and rows is not None:
+                _write_apps_snapshot(serial, rows)
+            self._apps_result(rows, error)
+        self.run_async(work, finished)
 
     def _apps_result(self, rows, error):
         self._apps_loading = False
@@ -2377,21 +2426,34 @@ class ManagerDroid(QMainWindow):
             try:
                 path = Path(icon_path)
                 if path.is_file():
+                    key = ("file", str(path), path.stat().st_mtime_ns)
+                    if key in _ICON_MEMO: return _ICON_MEMO[key]
                     candidate = QPixmap(str(path))
                     if not candidate.isNull():
                         if candidate.width() > 64 or candidate.height() > 64:
                             candidate = candidate.scaled(48, 48, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                        return QIcon(candidate)
+                        _ICON_MEMO[key] = QIcon(candidate)
+                        return _ICON_MEMO[key]
             except (OSError, ValueError):
                 pass
+        # App sem ícone encontrado: usa o ícone padrão enviado com o programa.
+        if FALLBACK_ICON.is_file():
+            if "fallback" not in _ICON_MEMO:
+                _ICON_MEMO["fallback"] = QIcon(str(FALLBACK_ICON))
+            return _ICON_MEMO["fallback"]
+        letter = (label[:1] or "A").upper()
+        color_index = sum(map(ord, label)) % 6
+        key = ("letter", letter, color_index)
+        if key in _ICON_MEMO: return _ICON_MEMO[key]
         pix = QPixmap(32, 32); pix.fill(Qt.transparent)
         painter = QPainter(pix); painter.setRenderHint(QPainter.Antialiasing)
         palette = ["#7C3AED", "#A855F7", "#8B5CF6", "#6D28D9", "#9333EA", "#C026D3"]
-        painter.setBrush(QColor(palette[sum(map(ord, label)) % len(palette)]))
+        painter.setBrush(QColor(palette[color_index]))
         painter.setPen(Qt.NoPen); painter.drawRoundedRect(1, 1, 30, 30, 9, 9)
         painter.setPen(QColor("white")); painter.setFont(QFont("Segoe UI", 12, QFont.Bold))
-        painter.drawText(pix.rect(), Qt.AlignCenter, (label[:1] or "A").upper()); painter.end()
-        return QIcon(pix)
+        painter.drawText(pix.rect(), Qt.AlignCenter, letter); painter.end()
+        _ICON_MEMO[key] = QIcon(pix)
+        return _ICON_MEMO[key]
 
     def refresh_app_info(self):
         if not self._app_rows:
@@ -2498,15 +2560,31 @@ class ManagerDroid(QMainWindow):
     def _on_app_info(self, pkg, label, icon, done, total):
         ent = self._label_cache.setdefault(pkg, {}); ent.update({"v": CACHE_VERSION, "label": label, "icon": icon})
         if not self._save_timer.isActive(): self._save_timer.start(2000)
-        items = self._app_rows.get(pkg)
-        if items:
-            _, icon_item, name_item = items
-            if label: name_item.setText(label)
-            icon_item.setIcon(self._app_icon(label or pkg, icon))
+        # Os nomes e ícones que chegam são acumulados e aplicados em lotes pequenos (ver _flush_pending_info).
+        self._pending_info = getattr(self, "_pending_info", {})
+        self._pending_info[pkg] = (label, icon)
+        if not getattr(self, "_info_flush_scheduled", False):
+            self._info_flush_scheduled = True
+            QTimer.singleShot(150, self._flush_pending_info)
         # Atualizar a barra para cada app força uma varredura de toda a tabela e
         # congela a interface em aparelhos com centenas/milhares de pacotes.
         if not self._progress_timer.isActive():
             self._progress_timer.start(120)
+
+    def _flush_pending_info(self):
+        self._info_flush_scheduled = False
+        pending = getattr(self, "_pending_info", {})
+        batch = list(pending.items())[:60]
+        for pkg, _ in batch: pending.pop(pkg, None)
+        for pkg, (label, icon) in batch:
+            items = self._app_rows.get(pkg)
+            if items:
+                _, icon_item, name_item = items
+                if label: name_item.setText(label)
+                icon_item.setIcon(self._app_icon(label or pkg, icon))
+        if pending:
+            self._info_flush_scheduled = True
+            QTimer.singleShot(16, self._flush_pending_info)
 
     def filter_apps(self):
         if not hasattr(self, "app_filter"): return

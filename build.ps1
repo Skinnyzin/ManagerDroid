@@ -10,7 +10,7 @@ py -m pip install -r requirements.txt pyinstaller
 # --onefile: um único .exe, sem pasta _internal
 # --windowed: sem janela de console | --icon: ícone do .exe | --add-data: .ico embutido (ícone da janela)
 py -m PyInstaller --noconfirm --clean --onefile --windowed --name ManagerDroid `
-    --icon $icon --add-data "$icon;." main.py
+    --icon $icon --add-data "$icon;." --add-data "android_fallback.png;." main.py
 
 Write-Host ""
 Write-Host "Build concluído. Executável em dist\ManagerDroid.exe"
