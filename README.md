@@ -187,4 +187,7 @@ Arquivos gerados em tempo de execução (não versionar):
 
 ---
 
+## Agradecimentos
+Agradeço imensamente o Genymobile (criador do scrcpy) por disponibilizar esta ferramenta, se não fosse por ele, o programa não teria funcionalidades incríveis <3
+
 ## Licença: MIT
