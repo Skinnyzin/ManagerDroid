@@ -2,8 +2,6 @@
   <img src="branding/managerdroid-logo.svg" alt="ManagerDroid" width="420">
 </p>
 
-# ManagerDroid
-
 Gerenciador de dispositivos Android para Windows, feito em Python (PySide6) sobre o **ADB**. Permite acompanhar o aparelho, gerenciar aplicativos, remover apps do sistema, espelhar a tela e executar ferramentas do dia a dia, tudo por uma interface em português ou inglês.
 
 > Não exige root. Funciona com depuração USB (ou ADB sem fio) habilitada no aparelho.
