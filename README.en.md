@@ -199,6 +199,8 @@ Files generated at runtime (do not commit):
 
 - **ADB (Android Debug Bridge)**: command-line tool created by the Android team at Google and distributed in the [Android Platform Tools](https://developer.android.com/tools/releases/platform-tools). ManagerDroid would not be able to talk to the device without it.
 - **scrcpy**: created by Romain Vimont and maintained by [Genymobile](https://github.com/Genymobile/scrcpy), it displays and controls an Android device's screen from the computer. Its license and credits are in the [official repository](https://github.com/Genymobile/scrcpy).
+- **Canta Debloater**: Created by samolego, this is a tool for removing unwanted apps from Android (https://github.com/samolego/Canta).
+If it weren't for them, the program wouldn't have all these features (Thank you <3)
 
 ---
 
