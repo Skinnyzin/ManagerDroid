@@ -880,7 +880,7 @@ class Worker(QThread):
         try: self.done.emit(self.fn(), None)
         except Exception as e: self.done.emit(None, str(e) or repr(e))
 
-HELPER_APK_URL = "https://github.com/Skinnyzin/ManagerDroid-Help/releases/download/managerdroid1/ManagerDroid-Helper.apk"
+HELPER_APK_URL = "https://github.com/Skinnyzin/ManagerDroid-Help/releases/download/managerdroid10/ManagerDroid-Helper.apk"
 HELPER_DOWNLOAD_REMOTE = "/sdcard/Download/ManagerDroid-Helper.apk"
 
 def download_helper_apk(progress=None) -> str:
@@ -888,7 +888,11 @@ def download_helper_apk(progress=None) -> str:
     dest_dir = Path(tempfile.mkdtemp(prefix="managerdroid_helper_"))
     dest = dest_dir / "ManagerDroid-Helper.apk"
     req = urllib.request.Request(HELPER_APK_URL, headers={"User-Agent": "ManagerDroid"})
-    with urllib.request.urlopen(req, timeout=60) as resp, open(dest, "wb") as out:
+    try:
+        resp = urllib.request.urlopen(req, timeout=60)
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"Erro {e.code} ao baixar o ManagerDroid Helper.\nEndereço usado: {HELPER_APK_URL}") from e
+    with resp, open(dest, "wb") as out:
         total = int(resp.headers.get("Content-Length") or 0); done = 0
         while True:
             chunk = resp.read(64 * 1024)
