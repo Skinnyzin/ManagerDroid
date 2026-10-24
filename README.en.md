@@ -204,6 +204,6 @@ Files generated at runtime (do not commit):
 
 ## License
 
-Choose a license before publishing (for example, MIT) and include the `LICENSE` file.
+This project is distributed under the [MIT License](LICENSE).
 
-Third-party tools (Platform Tools, scrcpy, icons) keep their own licenses. See the `NOTICE` file, if there is one.
+Third-party tools (Platform Tools, scrcpy, icons) keep their own licenses.

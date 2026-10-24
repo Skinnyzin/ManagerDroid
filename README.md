@@ -200,6 +200,6 @@ Arquivos gerados em tempo de execução (não versionar):
 
 ## Licença
 
-Defina a licença antes de publicar (por exemplo, MIT) e inclua o arquivo `LICENSE`.
+Este projeto é distribuído sob a [licença MIT](LICENSE).
 
-Ferramentas de terceiros (Platform Tools, scrcpy, ícones) mantêm suas próprias licenças. Consulte o arquivo `NOTICE`, se existir.
+Ferramentas de terceiros (Platform Tools, scrcpy, ícones) mantêm suas próprias licenças.
