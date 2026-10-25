@@ -11,6 +11,7 @@ from PySide6.QtCore import Qt, QThread, Signal, QSize, QByteArray, QTimer, QObje
 from PySide6.QtGui import QFont, QIcon, QPixmap, QColor, QPainter, QGuiApplication
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
+    QInputDialog,
     QFormLayout,
     QProgressDialog,
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
@@ -33,13 +34,18 @@ LOG_FILE = LOG_DIR / "droidcontrol.log"
 # Migra o cache portátil antigo na primeira execução, preservando nomes e ícones.
 _OLD_CACHE_DIR = DATA_DIR / "cache"
 _USER_DATA_ROOT = Path(os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or str(Path.home()))
-# Pasta de dados mantida como ManagerDroid para preservar configurações e cache já existentes.
-CACHE_DIR = _USER_DATA_ROOT / "DroidControl" / "cache"
+CACHE_DIR = _USER_DATA_ROOT / "ManagerDroid" / "cache"
+# Migração: copia o cache da pasta antiga (DroidControl) na primeira execução, sem apagar nada.
+_OLD_CACHE_ROOT = _USER_DATA_ROOT / "DroidControl" / "cache"
+if not CACHE_DIR.exists() and _OLD_CACHE_ROOT.is_dir():
+    try: shutil.copytree(_OLD_CACHE_ROOT, CACHE_DIR)
+    except OSError: pass
 LABEL_CACHE = CACHE_DIR / "app_labels.json"
 ICON_CACHE = CACHE_DIR / "icons"
 SETTINGS_FILE = CACHE_DIR / "settings.json"
 CACHE_VERSION = 4
-APP_VERSION = "20"
+APP_VERSION = "1.3.1"
+GITHUB_REPO = "Skinnyzin/ManagerDroid"   # dono/repositório onde as releases são publicadas
 HELPER_PKG = "com.managerdroid.help"
 HELPER_ACTION = "com.managerdroid.help.EXPORT"
 HELPER_REMOTE = "/sdcard/ManagerDroid"
@@ -92,10 +98,37 @@ def save_settings(data: dict):
 SETTINGS = load_settings()
 LANG = SETTINGS["lang"]
 
+ES = {
+    "Visão geral": "Vista general", "Aplicativos": "Aplicaciones", "Ferramentas": "Herramientas", "Console": "Consola",
+    "Configurações": "Configuración", "Dispositivo": "Dispositivo", "Atualizar": "Actualizar", "Tema": "Tema",
+    "Idioma / Language": "Idioma / Idioma", "Escuro": "Oscuro", "Claro": "Claro", "Salvar": "Guardar", "Cancelar": "Cancelar",
+    "Espelhar tela": "Duplicar pantalla", "Captura de tela": "Captura de pantalla", "Modelo": "Modelo",
+    "Patch de segurança": "Parche de seguridad", "Versão do Android": "Versión de Android", "Número de série": "Número de serie",
+    "Armazenamento": "Almacenamiento", "Memória RAM": "Memoria RAM", "Bateria": "Batería", "Ativados": "Activados",
+    "Desativados": "Desactivados", "Excluídos": "Eliminados", "Todos os tipos": "Todos los tipos", "Usuário": "Usuario",
+    "Sistema": "Sistema", "Ações": "Acciones", "Forçar parada": "Forzar detención", "Desativar": "Desactivar",
+    "Reativar": "Reactivar", "Desinstalar para usuário": "Desinstalar para el usuario", "Salvar APK no PC": "Guardar APK en el PC",
+    "Backup de dados": "Copia de seguridad de datos", "Atualizar ícones e nomes": "Actualizar iconos y nombres",
+    "Atualizar informações": "Actualizar información", "Consumo de bateria por app": "Consumo de batería por app",
+    "Salvar seleção como perfil": "Guardar selección como perfil", "Limpar cache de todos": "Borrar caché de todos",
+    "Reiniciar aparelho": "Reiniciar dispositivo", "Reiniciar": "Reiniciar", "Conectar": "Conectar", "Desconectar": "Desconectar",
+    "Esquecer": "Olvidar", "Verificar atualizações": "Buscar actualizaciones", "Não mostrar novamente": "No volver a mostrar",
+    "Permissões": "Permisos", "Próximo": "Siguiente", "Voltar": "Atrás", "Concluir": "Finalizar",
+    "Bem-vindo ao ManagerDroid": "Bienvenido a ManagerDroid",
+    "Depuração por Wi-Fi": "Depuración por Wi-Fi",
+    "Ative as opções do desenvolvedor": "Active las opciones de desarrollador",
+    "Ative a depuração USB": "Active la depuración USB",
+    "Conecte o cabo e aceite a chave": "Conecte el cable y acepte la clave",
+    "Xiaomi, Redmi e POCO (opcional)": "Xiaomi, Redmi y POCO (opcional)",
+    "Pronto!": "¡Listo!",
+}
+
 def t(text: str) -> str:
     """Traduz um texto estático ou com {placeholders}. Textos sem tradução ficam em português."""
     if LANG == "en":
         return TR.get(text, text)
+    if LANG == "es":
+        return ES.get(text, text)
     return text
 
 TR = {
@@ -103,6 +136,140 @@ TR = {
     "Visão geral": "Overview", "Aplicativos": "Apps", "Ferramentas": "Tools", "Console": "Console",
     "Dispositivo": "Device", "Alternar tema claro/escuro": "Toggle light/dark theme",
     "Trocar idioma": "Change language",
+    "Depuração por Wi-Fi": "Wi-Fi debugging",
+    'Bloqueado': 'Locked',
+    'Histórico': 'History',
+    'ManagerDroid Helper': 'ManagerDroid Helper',
+    'ManagerDroid Helper instalado.': 'ManagerDroid Helper installed.',
+    'Configurações salvas.': 'Settings saved.',
+    'Proporção automática: a largura define altura e DPI (clique para desativar)': 'Automatic ratio: width sets height and DPI (click to turn off)',
+    'Resultado: {ok}/{total} removidos.': 'Result: {ok}/{total} removed.',
+
+    'A remoção de pacotes de sistema pode quebrar funções do aparelho ou impedir a inicialização. Faça backup e remova poucos por vez.': 'Removing system packages can break device functions or prevent boot. Make a backup and remove only what you understand.',
+    'Abra-o pelo gerenciador de arquivos para instalar.': 'Open it with a file manager to install.',
+    'Aguardando dispositivo…': 'Waiting for device…',
+    'Ainda não há alterações registradas.': 'No changes recorded yet.',
+    'Aplicativos classificados como Inseguro não podem ser desinstalados pelo Debloat Android.': 'Apps rated Unsafe cannot be uninstalled by Debloat Android.',
+    'Atenção': 'Caution',
+    'Ativando TCP/IP': 'Enabling TCP/IP',
+    'Ativar TCP/IP': 'Enable TCP/IP',
+    "Ative 'Instalar via USB' nas opções do desenvolvedor do aparelho.": "Turn on 'Install via USB' in the device's developer options.",
+    'Ative a depuração por TCP/IP com o cabo conectado (porta 5555), depois conecte pelo IP do aparelho.': "Enable TCP/IP debugging with the cable connected (port 5555), then connect using the device's IP address.",
+    'Atualiza os aplicativos, nomes, ícones e recomendações.': 'Refreshes apps, names, icons and recommendations.',
+    'Atualizando aplicativos': 'Updating apps',
+    'Atualizando ícones e nomes…': 'Updating icons and names…',
+    'Baixando ManagerDroid Helper...': 'Downloading ManagerDroid Helper...',
+    'Baixando e instalando o ADB...': 'Downloading and installing ADB...',
+    'Baixando e instalando o scrcpy...': 'Downloading and installing scrcpy...',
+    'Bloqueado: classificação Inseguro.\nClique duas vezes para ler a descrição.': 'Locked: rated Unsafe.\nDouble-click to read the description.',
+    'Buscar nome, pacote ou descrição…': 'Search name, package or description…',
+    'Carregando nomes e ícones…\nAguarde enquanto os aplicativos são atualizados.': 'Loading names and icons…\nPlease wait while the apps are updated.',
+    'Carregando recomendações…': 'Loading recommendations…',
+    'Claro': 'Light',
+    'Clique duas vezes para ver a descrição completa.': 'Double-click to see the full description.',
+    'Clique para selecionar este aplicativo': 'Click to select this app',
+    'Compare os aplicativos com a lista comunitária. Clique duas vezes em um cartão para ler a descrição completa. Aplicativos classificados como Inseguro não podem ser selecionados para remoção.': 'Compare apps with the community list. Double-click a card to read the full description.',
+    'Conectando': 'Connecting',
+    'Conectar': 'Connect',
+    'Conecte um Android autorizado e clique em Escanear novamente.': 'Connect an authorized Android device and click Scan again.',
+    'Conexão sem fio (ADB Wi-Fi)': 'Wireless connection (ADB Wi-Fi)',
+    'Configurações': 'Settings',
+    'Confirmar desinstalação': 'Confirm uninstall',
+    'Debloat Android': 'Debloat Android',
+    'Desconectando': 'Disconnecting',
+    'Desconectar': 'Disconnect',
+    'Descrição': 'Description',
+    'Desinstalar selecionados': 'Uninstall selected',
+    'Desmarcar todos': 'Clear all',
+    'Detalhes:': 'Details:',
+    'Dispositivo conectado': 'Connected device',
+    'Dispositivo desconectado: {serial}': 'Device disconnected: {serial}',
+    'Dispositivo desconectado; tentando recuperar a conexão ADB…': 'Device disconnected; trying to recover the ADB connection…',
+    'Erro ao instalar ManagerDroid Helper': 'Error installing ManagerDroid Helper',
+    'Erro na instalação': 'Installation error',
+    'Escanear novamente': 'Scan again',
+    'Escolha um arquivo para enviá-lo à pasta Download do aparelho.': "Choose a file to send it to the device's Download folder.",
+    'Escolher arquivo e enviar': 'Choose file and send',
+    'Escuro': 'Dark',
+    'Especialista': 'Expert',
+    'Exportando nomes e ícones pelo helper…': 'Exporting names and icons through the helper…',
+    'Falha ao carregar recomendações: {error}': 'Failed to load recommendations: {error}',
+    'Falha ao instalar:': 'Failed to install:',
+    'Falha na transferência': 'Transfer failed',
+    'Fastboot': 'Fastboot',
+    'Fechar': 'Close',
+    'Histórico de alterações': 'Change history',
+    'Idioma / Language': 'Language / Idioma',
+    'Informe o IP:porta.': 'Enter the IP:port.',
+    'Inseguro': 'Unsafe',
+    'ManagerDroid Helper instalado. Se o Android solicitar uma permissão especial, autorize-a no aparelho.': 'ManagerDroid Helper installed. If Android asks for a special permission, allow it on the device.',
+    'Marca não reconhecida — Android': 'Brand not recognized — Android',
+    'Marcar recomendados': 'Mark recommended',
+    'Marque os pacotes que deseja desinstalar.': 'Select the packages you want to uninstall.',
+    'Nenhuma permissão encontrada.': 'No permission found.',
+    'Não foi possível instalar o ManagerDroid Helper automaticamente.': 'Could not install ManagerDroid Helper automatically.',
+    'Não foi possível obter nomes e ícones pelo helper: {e}': 'Could not get names and icons through the helper: {e}',
+    'Não foi possível verificar a atualização: {e}': 'Could not check for updates: {e}',
+    'Não listado': 'Not listed',
+    'Não é possível desinstalar aplicativos classificados como Inseguro:': 'Apps rated Unsafe cannot be uninstalled:',
+    "O ADB (Android Platform Tools) não foi encontrado.\n\nBaixar e instalar automaticamente na pasta 'adb' do ManagerDroid (cerca de 10 MB, do site oficial da Google)?": 'ADB (Android Platform Tools) was not found.',
+    'O APK foi enviado para a pasta Download do aparelho:': "The APK was sent to the device's Download folder:",
+    'O ManagerDroid Helper não está instalado neste dispositivo. Deseja instalá-lo agora?': 'ManagerDroid Helper is not installed on this device. Do you want to install it now?',
+    'O ManagerDroid Helper não respondeu. Abra o app ManagerDroid Helper no celular uma vez e tente de novo.': 'ManagerDroid Helper did not respond. Open the ManagerDroid Helper app on the phone once and try again.',
+    'O andamento da instalação aparecerá aqui.': 'Installation progress will appear here.',
+    'O arquivo foi transferido com êxito para o Android.\n\nDestino: {dest}': 'File transferred successfully to Android.',
+    'O scrcpy não está instalado.\n\nBaixar e instalar agora automaticamente (cerca de 10 MB, do site oficial do scrcpy)?': 'scrcpy is not installed.',
+    'Origem': 'Source',
+    'Para nomes e ícones completos, instale ou abra o ManagerDroid Helper no Android.': 'For full names and icons, install or open ManagerDroid Helper on Android.',
+    'Patch de segurança': 'Security patch',
+    "Permissão de arquivos não concedida ao helper. Abra o ManagerDroid Helper no aparelho e toque em 'Permitir acesso a arquivos'.": "File permission not granted to the helper. Open ManagerDroid Helper on the device and tap 'Allow file access'.",
+    'Proporção automática': 'Automatic ratio',
+    'Recomendado': 'Recommended',
+    'Recomendação': 'Recommendation',
+    'Recomendações carregadas: {n} pacotes · origem: {source}': 'Recommendations loaded: {n} packages · source: {source}',
+    'Resultado': 'Result',
+    'Selecionados: 0': 'Selected: 0',
+    'Selecionados: {n}': 'Selected: {n}',
+    'Selecionar ou desmarcar todos os aplicativos visíveis': 'Select or clear all visible apps',
+    'Sem descrição na base comunitária.': 'No description in the community database.',
+    'Sistema': 'System',
+    'Também falhou ao enviar para a pasta Download:': 'Also failed to send it to the Download folder:',
+    'Tema': 'Theme',
+    'Todos os riscos': 'All risks',
+    'Todos os tipos': 'All types',
+    'Transferência concluída': 'Transfer complete',
+    'Usuário': 'User',
+    'Você já está com a versão mais recente ({c}).': 'You already have the latest version ({c}).',
+    'Você já está com a versão mais recente.': 'You already have the latest version.',
+    'adb não encontrado.': 'adb not found.',
+    '{ok} de {n} concluído(s).': '{ok} of {n} completed.',
+
+    "Permissões": "Permissions", "Não mostrar novamente": "Don't show again",
+    "Marque para permitir e desmarque para revogar. Revogar pode fechar o app.": "Check to grant and uncheck to revoke. Revoking may close the app.",
+    "Nenhuma permissão editável encontrada para este app.": "No editable permission found for this app.",
+    "Permissões atualizadas.": "Permissions updated.",
+    "Verificar atualizações": "Check for updates",
+    "Reiniciar aparelho": "Restart device",
+    "Envia o comando de reinício ao aparelho conectado.": "Sends the restart command to the connected device.",
+    "Consumo de bateria por app": "Battery use by app", "Verificar atualização": "Check for updates",
+    "Lendo consumo de bateria…": "Reading battery use…", "Bateria": "Battery", "Aplicativo": "Application",
+    "Estimativa desde a última carga completa (dumpsys batterystats). Valores em mAh.": "Estimate since the last full charge (dumpsys batterystats). Values in mAh.",
+    "Nenhum dado de consumo encontrado. Use o aparelho por algum tempo e tente de novo.": "No usage data found. Use the device for a while and try again.",
+    "Perfis de aplicativos": "App profiles", "Salve uma lista de apps para desativar ou remover e aplique em todos os aparelhos conectados.": "Save a list of apps to disable or remove and apply it to all connected devices.",
+    "Aplicar nos aparelhos conectados": "Apply to connected devices", "Excluir perfil": "Delete profile",
+    "Salvar seleção como perfil": "Save selection as profile", "Salvar perfil": "Save profile", "Nome do perfil:": "Profile name:",
+    "Tipo de perfil": "Profile type", "O que o perfil deve fazer nos aparelhos?": "What should the profile do on the devices?",
+    "Desativar": "Disable", "Remover": "Remove", "Perfil salvo: {n} aplicativo(s).": "Profile saved: {n} app(s).",
+    "Escolha um perfil.": "Choose a profile.", "Nenhum aparelho conectado.": "No connected device.",
+    "Aplicar perfil": "Apply profile", "Aplicar '{p}' ({a}: {n} apps) em {d} aparelho(s)?": "Apply '{p}' ({a}: {n} apps) on {d} device(s)?",
+    "desativar": "disable", "remover": "remove", "Aplicando perfil…": "Applying profile…", "Perfil aplicado": "Profile applied",
+    "Concluído em {d} aparelho(s): {ok} operação(ões) com sucesso, {fail} falha(s).": "Done on {d} device(s): {ok} successful operation(s), {fail} failure(s).",
+    "Atualização": "Update", "Nova versão disponível: {v} (você está com {c}).\n\nAbrir a página de download?": "New version available: {v} (you have {c}).\n\nOpen the download page?",
+    "Atualizar ícones e nomes": "Refresh icons and names",
+    "Os nomes e ícones de todos os apps serão baixados de novo do aparelho. Continuar?": "The names and icons of all apps will be downloaded again from the device. Continue?",
+    "Dispositivos anteriores…": "Previous devices…", "Esquecer": "Forget",
+    "Salvar comando": "Save command", "Excluir": "Delete", "Comandos salvos": "Saved commands",
+    "Selecione um comando…": "Select a command…", "Mostrando lista salva; atualizando…": "Showing saved list; updating…",
     "Bem-vindo ao ManagerDroid": "Welcome to ManagerDroid",
     "Ative as opções do desenvolvedor": "Enable developer options",
     "Abra Configurações > Sobre o telefone e toque 7 vezes em “Número da versão” (ou “Número da compilação”). Se pedir, digite o PIN. Aparecerá a mensagem “Você agora é um desenvolvedor”.": "Open Settings > About phone and tap “Build number” 7 times. Enter your PIN if asked. You will see “You are now a developer”.",
@@ -158,7 +325,7 @@ TR = {
     "Limpar cache de todos": "Clear cache for all",
     "Remove o cache de todos os aplicativos do aparelho": "Removes the cache of all apps on the device",
     "Ícone": "Icon", "Aplicativo": "App", "Pacote": "Package", "Tamanho": "Size", "Estado: {state}": "State: {state}",
-    "Ações nos selecionados": "Actions on selected",
+    "Ações": "Actions",
     "Marque os apps na coluna ✔ (ou selecione linhas).": "Check apps in the ✔ column (or select rows).",
     "Nenhum app marcado.": "No app selected.", "{n} app(s) marcado(s)": "{n} app(s) selected",
     "Forçar parada": "Force stop", "Desativar": "Disable", "Reativar": "Enable",
@@ -406,11 +573,12 @@ QMenu::item:selected { background: @accent_soft; color: @accent; }
 QMenu::separator { height: 1px; background: @border; margin: 4px 8px; }
 QScrollArea { background: transparent; border: 0; }
 QScrollArea > QWidget > QWidget { background: transparent; }
-QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }
-QScrollBar::handle:vertical { background: @border; border-radius: 4px; min-height: 30px; }
-QScrollBar::handle:vertical:hover { background: @muted; }
-QScrollBar:horizontal { background: transparent; height: 10px; margin: 2px; }
-QScrollBar::handle:horizontal { background: @border; border-radius: 4px; min-width: 30px; }
+QScrollBar:vertical { background: transparent; width: 8px; margin: 4px 2px; }
+QScrollBar::handle:vertical { background: @border; border-radius: 4px; min-height: 36px; }
+QScrollBar::handle:vertical:hover { background: @accent; }
+QScrollBar:horizontal { background: transparent; height: 8px; margin: 2px 4px; }
+QScrollBar::handle:horizontal { background: @border; border-radius: 4px; min-width: 36px; }
+QScrollBar::handle:horizontal:hover { background: @accent; }
 QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
 """
 
@@ -602,6 +770,46 @@ def parse_meminfo(text: str):
     avail = vals.get("MemAvailable", vals.get("MemFree", 0)) // 1024
     return (max(0, total - avail), total)
 
+def _remember_wifi(addr: str):
+    """Guarda o endereço de um aparelho conectado por Wi-Fi (sem repetir)."""
+    devices = [d for d in SETTINGS.get("wifi_devices", []) if d != addr]
+    SETTINGS["wifi_devices"] = [addr] + devices[:19]
+    save_settings(SETTINGS)
+
+def parse_uid_map(text: str) -> dict:
+    """'pm list packages -U' -> {uid: pacote}."""
+    return {int(m.group(2)): m.group(1) for m in re.finditer(r"package:(\S+)\s+uid:(\d+)", text or "")}
+
+def parse_batterystats_uids(text: str) -> list:
+    """Lê a seção 'Estimated power use' do dumpsys batterystats -> [(uid, mAh)]."""
+    lines = (text or "").splitlines()
+    start = next((i for i, l in enumerate(lines) if "Estimated power use" in l), None)
+    if start is None: return []
+    out = []
+    for line in lines[start + 1:]:
+        if line and not line.startswith(" "):
+            break  # fim da seção
+        m = re.search(r"Uid\s+(u(\d+)a(\d+)|\d+):\s*([\d.]+)", line)
+        if not m: continue
+        if m.group(2) is not None:
+            uid = int(m.group(2)) * 100000 + 10000 + int(m.group(3))  # uN aM -> uid do usuário N
+        else:
+            uid = int(m.group(1))
+        out.append((uid, float(m.group(4))))
+    return out
+
+def parse_dumpsys_ram(text: str):
+    """Fallback para a RAM: 'dumpsys meminfo' traz 'Total RAM: 5,893,120K' e, às vezes, 'Free RAM'."""
+    def kb(pattern):
+        m = re.search(pattern, text or "")
+        return int(m.group(1).replace(",", "").replace(".", "")) if m else None
+    total = kb(r"Total RAM:\s*([\d,\.]+)\s*K")
+    if not total: return None
+    free = kb(r"Free RAM:\s*([\d,\.]+)\s*K") or 0
+    total_mb, avail_mb = total // 1024, free // 1024
+    if total_mb < 256: return None
+    return (max(0, total_mb - avail_mb), total_mb)
+
 def parse_battery(text: str):
     lvl = re.search(r"level:\s*(\d+)", text or "")
     tmp = re.search(r"temperature:\s*(-?\d+)", text or "")
@@ -779,6 +987,17 @@ def fmt_size(size) -> str:
     if size >= 1024 ** 3: return f"{size / 1024 ** 3:.2f} GB"
     if size >= 1024 ** 2: return f"{size / 1024 ** 2:.1f} MB"
     return f"{size / 1024:.0f} KB"
+
+ICON_SVGS.update({
+    'security': '<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path fill="#e3e3e3" d="M480-80q-139-35-229.5-159.5T160-516v-244l320-120 320 120v244q0 152-90.5 276.5T480-80Zm0-84q97-30 162-118.5T718-480H480v-315l-240 90v207q0 7 2 18h238v316Z"/></svg>',
+    'photo_camera': '<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path fill="#e3e3e3" d="M480-260q75 0 127.5-52.5T660-440q0-75-52.5-127.5T480-620q-75 0-127.5 52.5T300-440q0 75 52.5 127.5T480-260Zm0-80q-42 0-71-29t-29-71q0-42 29-71t71-29q42 0 71 29t29 71q0 42-29 71t-71 29ZM160-120q-33 0-56.5-23.5T80-200v-480q0-33 23.5-56.5T160-760h126l74-80h240l74 80h126q33 0 56.5 23.5T880-680v480q0 33-23.5 56.5T800-120H160Zm0-80h640v-480H638l-73-80H395l-73 80H160v480Zm320-240Z"/></svg>',
+    'translate': '<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path fill="#e3e3e3" d="m476-80 182-480h84L924-80h-84l-43-122H603L560-80h-84ZM160-200l-56-56 202-202q-35-35-63.5-80T190-640h84q20 39 40 68t48 58q33-33 68.5-92.5T484-720H40v-80h280v-80h80v80h280v80H564q-21 72-63 148t-83 116l96 98-30 82-122-125-202 201Zm468-72h144l-72-204-72 204Z"/></svg>',
+    'system_update': '<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path fill="#e3e3e3" d="M280-40q-33 0-56.5-23.5T200-120v-720q0-33 23.5-56.5T280-920h400q33 0 56.5 23.5T760-840v720q0 33-23.5 56.5T680-40H280Zm0-120v40h400v-40H280Zm0-80h400v-480H280v480Zm200-80L320-480l56-56 64 62v-166h80v166l64-62 56 56-160 160ZM280-800h400v-40H280v40Zm0 0v-40 40Zm0 640v40-40Z"/></svg>',
+})
+
+ICON_SVGS.update({
+    'wifi': '<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path fill="#e3e3e3" d="M480-120q-42 0-71-29t-29-71q0-42 29-71t71-29q42 0 71 29t29 71q0 42-29 71t-71 29ZM254-346l-84-86q59-59 138.5-93.5T480-560q92 0 171.5 35T790-430l-84 84q-44-44-102-69t-124-25q-66 0-124 25t-102 69ZM84-516 0-600q92-94 215-147t265-53q142 0 265 53t215 147l-84 84q-77-77-178.5-120.5T480-680q-116 0-217.5 43.5T84-516Z"/></svg>',
+})
 
 _ICON_MEMO = {}
 FALLBACK_ICON = BASE_DIR / "android_fallback.png"
@@ -1110,12 +1329,16 @@ class SettingsDialog(QDialog):
         self.language_choice = QComboBox()
         self.language_choice.addItem(svg_icon("language", p["text"], 18), "Português", "pt")
         self.language_choice.addItem(svg_icon("language", p["text"], 18), "English", "en")
-        self.language_choice.setCurrentIndex(0 if SETTINGS.get("lang", "pt") == "pt" else 1)
+        self.language_choice.addItem(svg_icon("language", p["text"], 18), "Español", "es")
+        self.language_choice.setCurrentIndex(max(0, self.language_choice.findData(SETTINGS.get("lang", "pt"))))
 
         for combo in (self.theme_choice, self.language_choice):
             combo.setMinimumWidth(170)
         lay.addLayout(row("dark_mode", t("Tema"), self.theme_choice))
         lay.addLayout(row("language", t("Idioma / Language"), self.language_choice))
+        update_btn = make_button(t("Verificar atualizações")); update_btn.setIcon(svg_icon("system_update", p["text"], 18))
+        update_btn.clicked.connect(lambda: parent.check_update(silent=False) if parent else None)
+        lay.addWidget(update_btn)
         lay.addStretch(1)
 
         bb = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
@@ -1157,6 +1380,7 @@ class OnboardingDialog(QDialog):
         lay.addWidget(self.icon_label, 0, Qt.AlignLeft)
         lay.addWidget(self.title_label); lay.addWidget(self.body_label); lay.addStretch(1)
 
+        self.dont_show = QCheckBox(t("Não mostrar novamente")); lay.addWidget(self.dont_show)
         nav = QHBoxLayout()
         self.counter_wrap = QHBoxLayout(); self.counter_wrap.addWidget(self.counter)
         self.back_btn = make_button(t("Voltar")); self.back_btn.clicked.connect(self._back)
@@ -1264,6 +1488,8 @@ class ManagerDroid(QMainWindow):
         tl.addWidget(self.refresh_btn)
         self.device_pill = QLabel("—"); self.device_pill.setObjectName("Pill"); self.device_pill.setFixedHeight(26)
         self.device_pill.setAlignment(Qt.AlignCenter); tl.addWidget(self.device_pill)
+        wifi_btn = make_button("", "Icon", t("Depuração por Wi-Fi"))
+        self._bind_icon(wifi_btn, "wifi"); wifi_btn.clicked.connect(self.open_wifi_dialog); tl.addWidget(wifi_btn)
         settings_btn = make_button(t("Configurações"), "Ghost"); settings_btn.clicked.connect(self.open_settings)
         tl.addWidget(settings_btn)
         outer.addWidget(top)
@@ -1341,6 +1567,13 @@ class ManagerDroid(QMainWindow):
         phone_lay.addWidget(phone_stage, 1, Qt.AlignCenter)
         self.phone_brand_label = QLabel(t("Aguardando dispositivo…")); self.phone_brand_label.setObjectName("CardHint"); self.phone_brand_label.setAlignment(Qt.AlignCenter); self.phone_brand_label.setWordWrap(True)
         phone_lay.addWidget(self.phone_brand_label)
+        phone_actions = QHBoxLayout(); phone_actions.setSpacing(8)
+        mirror_btn = make_button(t("Espelhar tela"), "Primary"); mirror_btn.clicked.connect(self.launch_scrcpy)
+        self._bind_icon(mirror_btn, "mobile", "accent_text")
+        shot_btn = make_button(t("Captura de tela")); shot_btn.clicked.connect(self.take_screenshot)
+        self._bind_icon(shot_btn, "photo_camera")
+        phone_actions.addStretch(1); phone_actions.addWidget(mirror_btn); phone_actions.addWidget(shot_btn); phone_actions.addStretch(1)
+        phone_lay.addLayout(phone_actions)
         self._set_phone_brand_logo("android")
         content.addWidget(phone_card, 2)
         lay.addLayout(content, 1)
@@ -1374,7 +1607,7 @@ class ManagerDroid(QMainWindow):
         self.app_filter = QLineEdit(); self.app_filter.setPlaceholderText(t("Buscar por nome ou pacote…"))
         self.app_filter.textChanged.connect(self.filter_apps); bar.addWidget(self.app_filter, 1)
         self.app_state = NoWheelComboBox()
-        self.app_state_keys = ["Todos", "Ativados", "Desativados", "Excluídos"]
+        self.app_state_keys = ["Ativados", "Desativados", "Excluídos"]
         self.app_state.addItems([t(k) for k in self.app_state_keys])
         self.app_state.setMinimumWidth(130); self.app_state.currentIndexChanged.connect(self.filter_apps)
         bar.addWidget(self.app_state)
@@ -1385,6 +1618,10 @@ class ManagerDroid(QMainWindow):
         self.apps_refresh_btn.setAccessibleName(t("Atualizar")); self.apps_refresh_btn.setFixedWidth(40)
         self.apps_refresh_btn.clicked.connect(self.refresh_apps_and_recommendations)
         self._bind_icon(self.apps_refresh_btn, "refresh"); bar.addWidget(self.apps_refresh_btn)
+        self.apps_icons_btn = make_button("", tooltip=t("Atualizar ícones e nomes"))
+        self.apps_icons_btn.setAccessibleName(t("Atualizar ícones e nomes")); self.apps_icons_btn.setFixedWidth(40)
+        self.apps_icons_btn.clicked.connect(self.refresh_icons_and_names)
+        self._bind_icon(self.apps_icons_btn, "download"); bar.addWidget(self.apps_icons_btn)
         clear_btn = make_button(t("Limpar cache de todos"), "Danger", t("Remove o cache de todos os aplicativos do aparelho"))
         clear_btn.clicked.connect(self.clear_cache_all); self._bind_icon(clear_btn, "delete", "danger")
         bar.addWidget(clear_btn)
@@ -1431,8 +1668,7 @@ class ManagerDroid(QMainWindow):
         self.apps_table.verticalScrollBar().valueChanged.connect(lambda _: self._sched_timer.start(500))
         body.addWidget(self.apps_table, 1)
 
-        side, sl = make_card(t("Ações nos selecionados"),
-                             t("Marque os apps na coluna ✔ (ou selecione linhas).") + " " +
+        side, sl = make_card(t("Ações"),
                              t("Os apps de sistema só são buscados quando aparecem na tela."))
         self.apps_side_hint = QLabel(t("Nenhum app marcado.")); self.apps_side_hint.setObjectName("Info")
         sl.addWidget(self.apps_side_hint)
@@ -1442,12 +1678,14 @@ class ManagerDroid(QMainWindow):
             (t("Reativar"), "toggle_on", "text", self.enable_app),
             (t("Salvar APK no PC"), "download", "text", self.backup_apk),
             (t("Backup de dados"), "download", "text", self.data_backup),
+            (t("Consumo de bateria por app"), "battery", "text", self.battery_by_app),
+            (t("Salvar seleção como perfil"), "checkbox_checked", "text", self.save_profile),
             (t("Desinstalar para usuário"), "delete", "danger", self.uninstall_app),
         ]:
             b = make_button(label, "Danger" if role == "danger" else "SideAction")
             b.clicked.connect(cb); self._bind_icon(b, icon, role); sl.addWidget(b)
         sl.addStretch(1)
-        side.setFixedWidth(270)
+        side.setFixedWidth(300)
         body.addWidget(side)
         lay.addLayout(body, 1)
         if self._last_rows is not None:
@@ -1691,12 +1929,12 @@ class ManagerDroid(QMainWindow):
         go = make_button(t("Instalar"), "Primary"); go.clicked.connect(self.install_files)
         self.install_go_btn = go
         r.addWidget(browse); r.addWidget(history); r.addWidget(self.install_cancel_btn); r.addStretch(1); r.addWidget(go); il.addLayout(r)
-        grid.addWidget(inst, 0, 0)
+        grid.addWidget(inst, 0, 0, 1, 2)
 
         files, fl = make_card(t("Arquivos"), t("Escolha um arquivo para enviá-lo à pasta Download do aparelho."))
         send = make_button(t("Escolher arquivo e enviar"), "Primary"); send.clicked.connect(self.push_file)
         fl.addWidget(send); fl.addStretch(1)
-        grid.addWidget(files, 0, 1)
+        grid.addWidget(files, 1, 0, 1, 2)
 
         disp, dl = make_card(t("Tela"), t("A resolução e o DPI atuais são lidos automaticamente ao conectar o aparelho."))
         top = QHBoxLayout(); top.setSpacing(8)
@@ -1719,24 +1957,25 @@ class ManagerDroid(QMainWindow):
         reset = make_button(t("Restaurar padrão")); reset.clicked.connect(self.reset_display)
         apply_btn = make_button(t("Aplicar"), "Primary"); apply_btn.clicked.connect(self.set_resolution_and_density)
         dr.addWidget(reset); dr.addStretch(1); dr.addWidget(apply_btn); dl.addLayout(dr)
-        grid.addWidget(disp, 1, 0, 1, 2)
+        grid.addWidget(disp, 2, 0, 1, 2)
         wifi, wl = make_card(t("Conexão sem fio (ADB Wi-Fi)"),
                              t("Ative a depuração por TCP/IP com o cabo conectado (porta 5555), depois conecte pelo IP do aparelho."))
+        saved_row = QHBoxLayout(); saved_row.setSpacing(8)
+        self.wifi_saved = NoWheelComboBox(); self.wifi_saved.setMinimumWidth(200)
+        self.wifi_saved.activated.connect(self._wifi_pick_saved)
+        forget = make_button(t("Esquecer"), "Ghost"); forget.clicked.connect(self._wifi_forget)
+        saved_row.addWidget(self.wifi_saved, 1); saved_row.addWidget(forget)
+        wl.addLayout(saved_row)
         self.wifi_addr = QLineEdit(); self.wifi_addr.setPlaceholderText("192.168.0.10:5555"); wl.addWidget(self.wifi_addr)
         wr = QHBoxLayout(); wr.setSpacing(8)
         for label, kind, obj in [(t("Ativar TCP/IP"), "tcpip", ""), (t("Conectar"), "connect", "Primary"),
                                  (t("Desconectar"), "disconnect", "")]:
             b = make_button(label, obj); b.clicked.connect(lambda _=False, k=kind: self.wifi_action(k)); wr.addWidget(b)
         wr.addStretch(1); wl.addLayout(wr)
-        grid.addWidget(wifi, 2, 0)
+        self.wifi_card = wifi
+        self._reload_wifi_saved()
 
-        actions, al = make_card(t("Ações"), t("Espelhamento usa o scrcpy; reinício envia o comando ao aparelho."))
-        row = QHBoxLayout(); row.setSpacing(10)
-        mirror = make_button(t("Espelhar tela"), "Primary"); mirror.clicked.connect(self.launch_scrcpy); self._bind_icon(mirror, "mobile", "accent_text")
-        shot = make_button(t("Captura de tela")); shot.clicked.connect(self.take_screenshot); self._bind_icon(shot, "download")
-        refresh = make_button(t("Atualizar informações")); refresh.clicked.connect(self.refresh_device_details); self._bind_icon(refresh, "refresh")
-        for b in (mirror, shot, refresh): row.addWidget(b)
-        row.addStretch(1); al.addLayout(row)
+        reboot_card, al = make_card(t("Reiniciar aparelho"), t("Envia o comando de reinício ao aparelho conectado."))
         rr = QHBoxLayout(); rr.setSpacing(10)
         self.reboot_mode = NoWheelComboBox()
         for label, mode in [(t("Sistema normal"), ""), (t("Recovery"), "recovery"), (t("Bootloader"), "bootloader"), (t("Fastboot"), "fastboot")]:
@@ -1745,7 +1984,17 @@ class ManagerDroid(QMainWindow):
         reboot = make_button(t("Reiniciar"), "Danger"); reboot.clicked.connect(lambda: self.reboot(self.reboot_mode.currentData()))
         rr.addWidget(QLabel(t("Reiniciar para:"))); rr.addWidget(self.reboot_mode); rr.addWidget(reboot); rr.addStretch(1)
         al.addLayout(rr)
-        grid.addWidget(actions, 3, 0, 1, 2)
+        grid.addWidget(reboot_card, 4, 0, 1, 2)
+        profiles, pl = make_card(t("Perfis de aplicativos"),
+                                 t("Salve uma lista de apps para desativar ou remover e aplique em todos os aparelhos conectados."))
+        prow = QHBoxLayout(); prow.setSpacing(8)
+        self.profile_combo = NoWheelComboBox(); self.profile_combo.setMinimumWidth(240)
+        apply_p = make_button(t("Aplicar nos aparelhos conectados"), "Primary"); apply_p.clicked.connect(self.apply_profile)
+        del_p = make_button(t("Excluir perfil"), "Ghost"); del_p.clicked.connect(self.delete_profile)
+        prow.addWidget(self.profile_combo, 1); prow.addWidget(apply_p); prow.addWidget(del_p)
+        pl.addLayout(prow)
+        grid.addWidget(profiles, 5, 0, 1, 2)
+        self._reload_profiles()
         outer.addLayout(grid)
         outer.addStretch(1)
         return self._scroll(w)
@@ -1762,6 +2011,15 @@ class ManagerDroid(QMainWindow):
         run_btn = make_button(t("Executar"), "Primary"); run_btn.clicked.connect(self.run_console_command)
         row.addWidget(self.console_mode); row.addWidget(self.console_command, 1); row.addWidget(run_btn)
         lay.addLayout(row)
+        saved_row = QHBoxLayout(); saved_row.setSpacing(8)
+        self.console_saved = NoWheelComboBox(); self.console_saved.setMinimumWidth(260)
+        self.console_saved.activated.connect(self._console_pick_saved)
+        save_cmd = make_button(t("Salvar comando"), "Ghost"); save_cmd.clicked.connect(self._console_save_command)
+        del_cmd = make_button(t("Excluir"), "Ghost"); del_cmd.clicked.connect(self._console_delete_saved)
+        saved_row.addWidget(QLabel(t("Comandos salvos"))); saved_row.addWidget(self.console_saved, 1)
+        saved_row.addWidget(save_cmd); saved_row.addWidget(del_cmd)
+        lay.addLayout(saved_row)
+        self._reload_console_saved()
         acts = QHBoxLayout(); acts.setSpacing(8)
         shell_btn = make_button(t("Abrir terminal ADB")); shell_btn.clicked.connect(self.open_adb_terminal)
         clear = make_button(t("Limpar log"), "Ghost"); clear.clicked.connect(self.clear_logs)
@@ -1913,6 +2171,10 @@ class ManagerDroid(QMainWindow):
         except Exception as e:
             self.device_pill.setText(t("Erro no ADB")); self.statusBar().showMessage(str(e), 6000); return
         entries = parse_devices(output)
+        # Com Wi-Fi, o adb pode listar o mesmo aparelho em duas portas (uma conectada, outra offline).
+        online_hosts = {s.rsplit(":", 1)[0] for s, st in entries if st == "device" and ":" in s}
+        entries = [(s, st) for s, st in entries
+                   if not (st != "device" and ":" in s and s.rsplit(":", 1)[0] in online_hosts)]
         if entries == self._entries and not force: return
         previous = self.device
         gone = [s_ for s_, _ in (self._entries or []) if s_ not in {x for x, _ in entries}]
@@ -2166,6 +2428,9 @@ class ManagerDroid(QMainWindow):
             out = {}
             try: out["ram"] = parse_meminfo(run_command(adb + ["shell", "cat", "/proc/meminfo"], 15))
             except Exception: out["ram"] = None
+            if not out["ram"] or out["ram"][1] < 256:
+                try: out["ram"] = parse_dumpsys_ram(run_command(adb + ["shell", "dumpsys", "meminfo"], 20))
+                except Exception: out["ram"] = None
             try: out["level"], out["temp"] = parse_battery(run_command(adb + ["shell", "dumpsys", "battery"], 15))
             except Exception: out["level"], out["temp"] = None, None
             try:
@@ -2188,8 +2453,8 @@ class ManagerDroid(QMainWindow):
                 ram_pct = round(used * 100 / total) if total else 0
                 self.ram_bar.setValue(ram_pct)
                 self._set_usage_bar_color(self.ram_bar, ram_pct, inverse=False)
-                used_txt = f"{used / 1024:.0f}MB" if used < 1024 else f"{used / 1024:.1f}GB"
-                total_txt = f"{total / 1024:.0f}MB" if total < 1024 else f"{total / 1024:.1f}GB"
+                used_txt = f"{used:.0f}MB" if used < 1024 else f"{used / 1024:.1f}GB"
+                total_txt = f"{total:.0f}MB" if total < 1024 else f"{total / 1024:.1f}GB"
                 self.ram_label.setText(f"{used_txt}/{total_txt} ({ram_pct}% uso)")
             if result.get("storage"):
                 used_b, total_b = result["storage"]
@@ -2586,10 +2851,18 @@ class ManagerDroid(QMainWindow):
             self._info_flush_scheduled = True
             QTimer.singleShot(16, self._flush_pending_info)
 
+    def refresh_icons_and_names(self):
+        """Apaga o índice de nomes/ícones: a próxima atualização baixa novamente tudo do helper."""
+        try: APP_INDEX.unlink()
+        except OSError: pass
+        self._pending_info = {}
+        self.statusBar().showMessage(t("Atualizando ícones e nomes…"), 4000)
+        self.refresh_apps_and_recommendations()
+
     def filter_apps(self):
         if not hasattr(self, "app_filter"): return
         term = self.app_filter.text().lower()
-        wanted = {0: None, 1: "Ativados", 2: "Desativados", 3: "Excluídos"}[self.app_state.currentIndex()]
+        wanted = {0: "Ativados", 1: "Desativados", 2: "Excluídos"}.get(self.app_state.currentIndex(), "Ativados")
         typ = self.app_type.currentIndex()
         for r in range(self.apps_table.rowCount()):
             name_item, pkg_item = self.apps_table.item(r, 2), self.apps_table.item(r, 3)
@@ -2645,6 +2918,52 @@ class ManagerDroid(QMainWindow):
         r = self.apps_table.currentRow()
         item = self.apps_table.item(r, 3) if r >= 0 else None
         if item: self.open_app(item.text())
+
+    def edit_permissions(self, pkg):
+        """Lista as permissões de tempo de execução do app, com caixas para conceder ou revogar."""
+        try: adb = self.adb()
+        except Exception as e: QMessageBox.warning(self, t("Aviso"), str(e)); return
+        def work():
+            out = run_command(adb + ["shell", "dumpsys", "package", pkg], 60)
+            states = {}
+            for m in re.finditer(r"^\s*([A-Za-z][\w.]*):\s*granted=(true|false)", out, flags=re.M):
+                states[m.group(1)] = (m.group(2) == "true")
+            return states
+        def done(states, error):
+            if error: QMessageBox.warning(self, t("Aviso"), str(error)); return
+            if not states:
+                QMessageBox.information(self, t("Permissões"), t("Nenhuma permissão editável encontrada para este app."))
+                return
+            dlg = QDialog(self); dlg.setWindowTitle(f"{t('Permissões')} — {pkg}"); dlg.setMinimumWidth(480)
+            lay = QVBoxLayout(dlg)
+            hint = QLabel(t("Marque para permitir e desmarque para revogar. Revogar pode fechar o app.")); hint.setWordWrap(True)
+            lay.addWidget(hint)
+            scroll = QScrollArea(); scroll.setWidgetResizable(True)
+            inner = QWidget(); il = QVBoxLayout(inner)
+            boxes = {}
+            for perm in sorted(states, key=str.casefold):
+                cb = QCheckBox(perm.replace("android.permission.", "")); cb.setChecked(states[perm]); cb.setToolTip(perm)
+                il.addWidget(cb); boxes[perm] = cb
+            il.addStretch(1); scroll.setWidget(inner); lay.addWidget(scroll, 1)
+            bb = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel); lay.addWidget(bb)
+            bb.rejected.connect(dlg.reject)
+            def apply():
+                changes = [(p, cb.isChecked()) for p, cb in boxes.items() if cb.isChecked() != states[p]]
+                dlg.accept()
+                if not changes: return
+                def apply_work():
+                    errors = []
+                    for perm, grant in changes:
+                        try: run_command(adb + ["shell", "pm", "grant" if grant else "revoke", pkg, perm], 20)
+                        except Exception as e: errors.append(f"{perm}: {e}")
+                    return errors
+                def applied(errors, err):
+                    if err or errors: QMessageBox.warning(self, t("Aviso"), str(err or "\n".join(errors)))
+                    else: self.statusBar().showMessage(t("Permissões atualizadas."), 4000)
+                self.run_async(apply_work, applied)
+            bb.accepted.connect(apply)
+            dlg.exec()
+        self.run_async(work, done)
 
     def show_permissions(self, pkg):
         try: adb = self.adb()
@@ -2817,7 +3136,8 @@ class ManagerDroid(QMainWindow):
         menu.addSeparator()
         menu.addAction(t("Copiar nome do app"), lambda: self._copy(name, t("Nome copiado.")))
         menu.addAction(t("Copiar nome do pacote"), lambda: self._copy(pkg, t("Pacote copiado.")))
-        menu.addAction(t("Ver permissões"), lambda: self.show_permissions(pkg))
+        menu.addAction(svg_icon("security", PALETTES["dark" if self.dark else "light"]["text"], 18),
+                       t("Permissões"), lambda: self.edit_permissions(pkg))
         menu.exec(self.apps_table.viewport().mapToGlobal(pos))
 
     def _copy(self, text, message):
@@ -3066,9 +3386,9 @@ class ManagerDroid(QMainWindow):
     def take_screenshot(self):
         try: self.ensure_device()
         except Exception as e: QMessageBox.warning(self, t("Aviso"), str(e)); return
-        path, _ = QFileDialog.getSaveFileName(self, t("Salvar captura de tela"), str(Path.home() / "Pictures" / "ManagerDroid.png"), "PNG (*.png)")
-        if not path: return
-        if not path.lower().endswith(".png"): path += ".png"
+        folder = Path.home() / "Pictures" / "ManagerDroid"
+        folder.mkdir(parents=True, exist_ok=True)
+        path = str(folder / f"captura_{datetime.now():%Y%m%d_%H%M%S}.png")
         try:
             args = [find_tool("adb")] + (["-s", self.device] if self.device else [])
             proc = subprocess.run(args + ["exec-out", "screencap", "-p"], capture_output=True, timeout=30,
@@ -3076,6 +3396,8 @@ class ManagerDroid(QMainWindow):
             if proc.returncode != 0 or not proc.stdout.startswith(b"\x89PNG"):
                 raise RuntimeError(proc.stderr.decode("utf-8", "replace") or t("O Android não retornou uma imagem PNG."))
             Path(path).write_bytes(proc.stdout)
+            try: os.startfile(path)
+            except (AttributeError, OSError): pass
             self.statusBar().showMessage(t("Captura salva em {path}").format(path=path), 5000)
         except Exception as e: QMessageBox.critical(self, t("Erro"), str(e))
 
@@ -3124,10 +3446,17 @@ class ManagerDroid(QMainWindow):
 
     def _startup_dialogs(self):
         if not SETTINGS.get("onboarding_done"):
-            OnboardingDialog(self).exec()
-            SETTINGS["onboarding_done"] = True
-            save_settings(SETTINGS)
+            dlg = OnboardingDialog(self); dlg.exec()
+            if dlg.dont_show.isChecked():
+                SETTINGS["onboarding_done"] = True
+                save_settings(SETTINGS)
         self._offer_adb_install()
+
+    def _auto_check_update(self):
+        today = datetime.now().strftime("%Y-%m-%d")
+        if SETTINGS.get("last_update_check") == today: return
+        SETTINGS["last_update_check"] = today; save_settings(SETTINGS)
+        self.check_update(silent=True)
 
     def _offer_adb_install(self):
         if find_tool("adb"): return
@@ -3199,23 +3528,144 @@ class ManagerDroid(QMainWindow):
         try: os.startfile(str(LOG_DIR))
         except Exception as e: QMessageBox.warning(self, t("Logs"), str(e))
 
-    def check_update(self):
-        url = SETTINGS.get("update_url", "")
-        if not url:
-            QMessageBox.information(self, t("Atualização"), t("Configure a URL de atualização nas configurações.")); return
+    def check_update(self, silent=False):
+        """Compara APP_VERSION com a última release publicada no GitHub (GITHUB_REPO)."""
+        import webbrowser
         def work():
-            import urllib.request
-            with urllib.request.urlopen(url, timeout=10) as r:
+            req = urllib.request.Request(f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest",
+                                         headers={"Accept": "application/vnd.github+json", "User-Agent": "ManagerDroid"})
+            with urllib.request.urlopen(req, timeout=10) as r:
                 return json.loads(r.read().decode("utf-8"))
         def done(data, error):
             if error:
-                QMessageBox.warning(self, t("Atualização"), t("Não foi possível verificar a atualização: {e}").format(e=error)); return
-            latest = str(data.get("version", ""))
+                if not silent:
+                    QMessageBox.warning(self, t("Atualização"), t("Não foi possível verificar a atualização: {e}").format(e=error))
+                return
+            def _version_in(text):
+                m = re.search(r"\d+(?:\.\d+)+", str(text or ""))
+                return m.group(0) if m else None
+            latest = _version_in(data.get("tag_name", "")) or _version_in(data.get("name", ""))
+            if not latest:
+                if not silent:
+                    QMessageBox.information(self, t("Atualização"), t("Você já está com a versão mais recente ({c}).").format(c=APP_VERSION))
+                return
+            page = data.get("html_url", "")
             if latest and version_tuple(latest) > version_tuple(APP_VERSION):
-                QMessageBox.information(self, t("Atualização"), t("Nova versão disponível: {v}. {url}").format(v=latest, url=data.get("url", "")))
-            else:
+                answer = QMessageBox.question(self, t("Atualização"), t(
+                    "Nova versão disponível: {v} (você está com {c}).\n\nAbrir a página de download?").format(v=latest, c=APP_VERSION))
+                if answer == QMessageBox.Yes and page: webbrowser.open(page)
+            elif not silent:
                 QMessageBox.information(self, t("Atualização"), t("Você já está com a versão mais recente."))
         self.run_async(work, done)
+
+    def battery_by_app(self):
+        try: self.ensure_device(); adb = self.adb()
+        except Exception as e: QMessageBox.warning(self, t("Aviso"), str(e)); return
+        self.note(t("Lendo consumo de bateria…"))
+        def work():
+            stats = run_command(adb + ["shell", "dumpsys", "batterystats"], 120)
+            uidmap = parse_uid_map(run_command(adb + ["shell", "pm", "list", "packages", "-U"], 60))
+            rows = [(uidmap[uid], mah) for uid, mah in parse_batterystats_uids(stats) if uid in uidmap]
+            return sorted(rows, key=lambda r: r[1], reverse=True)[:30]
+        self.run_async(work, self._battery_result)
+
+    def _battery_result(self, rows, error):
+        if error: QMessageBox.warning(self, t("Bateria"), str(error)); return
+        dlg = QDialog(self); dlg.setWindowTitle(t("Consumo de bateria por app")); dlg.setMinimumSize(560, 440)
+        lay = QVBoxLayout(dlg); lay.setContentsMargins(20, 18, 20, 16); lay.setSpacing(12)
+        hint = QLabel(t("Estimativa desde a última carga completa (dumpsys batterystats). Valores em mAh.")); hint.setWordWrap(True)
+        lay.addWidget(hint)
+        table = QTableWidget(len(rows), 3); table.setHorizontalHeaderLabels([t("Aplicativo"), t("Pacote"), "mAh"])
+        table.setEditTriggers(QTableWidget.NoEditTriggers)
+        for r, (pkg, mah) in enumerate(rows):
+            table.setItem(r, 0, QTableWidgetItem(self._app_name(pkg)))
+            table.setItem(r, 1, QTableWidgetItem(pkg))
+            table.setItem(r, 2, QTableWidgetItem(f"{mah:.1f}"))
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        lay.addWidget(table)
+        if not rows: lay.addWidget(QLabel(t("Nenhum dado de consumo encontrado. Use o aparelho por algum tempo e tente de novo.")))
+        close = make_button(t("Fechar")); close.clicked.connect(dlg.accept); lay.addWidget(close, 0, Qt.AlignRight)
+        dlg.exec()
+
+    # ---------- perfis de aplicativos
+    def _reload_profiles(self):
+        if not hasattr(self, "profile_combo"): return
+        self.profile_combo.clear()
+        for name in SETTINGS.get("app_profiles", {}): self.profile_combo.addItem(name)
+
+    def save_profile(self):
+        try: pkgs = self.target_packages()
+        except Exception as e: QMessageBox.warning(self, t("Aviso"), str(e)); return
+        name, ok = QInputDialog.getText(self, t("Salvar perfil"), t("Nome do perfil:"))
+        if not ok or not name.strip(): return
+        box = QMessageBox(self); box.setWindowTitle(t("Tipo de perfil"))
+        box.setText(t("O que o perfil deve fazer nos aparelhos?"))
+        b_dis = box.addButton(t("Desativar"), QMessageBox.AcceptRole)
+        b_rem = box.addButton(t("Remover"), QMessageBox.DestructiveRole)
+        box.addButton(t("Cancelar"), QMessageBox.RejectRole)
+        box.exec()
+        if box.clickedButton() is b_dis: action = "disable"
+        elif box.clickedButton() is b_rem: action = "uninstall"
+        else: return
+        SETTINGS.setdefault("app_profiles", {})[name.strip()] = {"action": action, "packages": pkgs}
+        save_settings(SETTINGS); self._reload_profiles()
+        self.note(t("Perfil salvo: {n} aplicativo(s).").format(n=len(pkgs)))
+
+    def delete_profile(self):
+        name = self.profile_combo.currentText()
+        if not name: return
+        SETTINGS.get("app_profiles", {}).pop(name, None)
+        save_settings(SETTINGS); self._reload_profiles()
+
+    def apply_profile(self):
+        name = self.profile_combo.currentText()
+        profile = SETTINGS.get("app_profiles", {}).get(name)
+        if not profile: QMessageBox.warning(self, t("Aviso"), t("Escolha um perfil.")); return
+        tool = find_tool("adb")
+        if not tool: QMessageBox.warning(self, t("Aviso"), t("adb não encontrado.")); return
+        devices = [s for s, st in parse_devices(run_command([tool, "devices"], 20)) if st == "device"]
+        if not devices: QMessageBox.warning(self, t("Aviso"), t("Nenhum aparelho conectado.")); return
+        pkgs, action = list(profile.get("packages", [])), profile.get("action", "disable")
+        verb = t("desativar") if action == "disable" else t("remover")
+        if QMessageBox.question(self, t("Aplicar perfil"), t(
+                "Aplicar '{p}' ({a}: {n} apps) em {d} aparelho(s)?").format(p=name, a=verb, n=len(pkgs), d=len(devices))) != QMessageBox.Yes:
+            return
+        def work():
+            ok = fail = 0
+            for serial in devices:
+                base = [tool, "-s", serial, "shell"]
+                for pkg in pkgs:
+                    cmd = (["pm", "disable-user", "--user", "0", pkg] if action == "disable"
+                           else ["pm", "uninstall", "-k", "--user", "0", pkg])
+                    try:
+                        low = (run_command(base + cmd, 60) or "").lower()
+                        if "success" in low or "disabled" in low: ok += 1
+                        else: fail += 1
+                    except Exception: fail += 1
+            return ok, fail, len(devices)
+        self.note(t("Aplicando perfil…"))
+        def done(result, error):
+            if error: QMessageBox.warning(self, t("Aviso"), str(error)); return
+            ok, fail, count = result
+            QMessageBox.information(self, t("Perfil aplicado"), t(
+                "Concluído em {d} aparelho(s): {ok} operação(ões) com sucesso, {fail} falha(s).").format(d=count, ok=ok, fail=fail))
+        self.run_async(work, done)
+
+    def open_wifi_dialog(self):
+        """Abre a conexão sem fio (ADB Wi-Fi) em uma janela, a partir do botão do cabeçalho."""
+        dlg = getattr(self, "_wifi_dialog", None)
+        if dlg is None:
+            dlg = QDialog(self); dlg.setWindowTitle(t("Conexão sem fio (ADB Wi-Fi)")); dlg.setMinimumWidth(520)
+            QVBoxLayout(dlg)
+            self._wifi_dialog = dlg
+        lay = dlg.layout()
+        # Remove cartões antigos (de antes de uma troca de idioma) e recoloca o atual.
+        while lay.count():
+            w = lay.takeAt(0).widget()
+            if w is not None and w is not getattr(self, "wifi_card", None): w.deleteLater()
+        lay.addWidget(self.wifi_card)
+        dlg.exec()
 
     def open_settings(self):
         if SettingsDialog(self).exec():
@@ -3242,12 +3692,78 @@ class ManagerDroid(QMainWindow):
         elif kind == "connect":
             if not addr: QMessageBox.warning(self, t("Aviso"), t("Informe o IP:porta.")); return
             args = [tool, "connect", addr]
-            self.run_tool(t("Conectando"), lambda: run_command(args, 30))
+            def do_connect():
+                out = run_command(args, 30) or ""
+                low = out.lower()
+                if "connected to" in low and "failed" not in low:
+                    _remember_wifi(addr)
+                return out
+            self.run_tool(t("Conectando"), do_connect)
             QTimer.singleShot(2000, lambda: self.refresh_devices(force=True))
+            QTimer.singleShot(2500, self._reload_wifi_saved)
         else:
             args = [tool, "disconnect", addr] if addr else [tool, "disconnect"]
             self.run_tool(t("Desconectando"), lambda: run_command(args, 30) or t("Operação concluída."))
             QTimer.singleShot(1500, lambda: self.refresh_devices(force=True))
+
+    def force_refresh_app_info(self):
+        """Apaga o índice e os ícones salvos: a próxima atualização baixa nomes e ícones de todos os apps."""
+        if QMessageBox.question(self, t("Atualizar ícones e nomes"), t(
+                "Os nomes e ícones de todos os apps serão baixados de novo do aparelho. Continuar?")) != QMessageBox.Yes:
+            return
+        try:
+            _save_app_index({})
+            for f in ICON_CACHE.glob("*.png"):
+                try: f.unlink()
+                except OSError: pass
+        except OSError:
+            pass
+        self.load_apps()
+
+    def _reload_wifi_saved(self):
+        self.wifi_saved.clear()
+        self.wifi_saved.addItem(t("Dispositivos anteriores…"))
+        for addr in SETTINGS.get("wifi_devices", []):
+            self.wifi_saved.addItem(addr)
+
+    def _wifi_pick_saved(self, index):
+        if index > 0: self.wifi_addr.setText(self.wifi_saved.itemText(index))
+
+    def _wifi_forget(self):
+        index = self.wifi_saved.currentIndex()
+        if index <= 0: return
+        addr = self.wifi_saved.itemText(index)
+        devices = [d for d in SETTINGS.get("wifi_devices", []) if d != addr]
+        SETTINGS["wifi_devices"] = devices; save_settings(SETTINGS)
+        self._reload_wifi_saved()
+
+    def _reload_console_saved(self):
+        self.console_saved.clear()
+        self.console_saved.addItem(t("Selecione um comando…"))
+        for item in SETTINGS.get("console_saved", []):
+            self.console_saved.addItem(f"[{item.get('mode', 'ADB')}] {item.get('cmd', '')}", item)
+
+    def _console_pick_saved(self, index):
+        if index <= 0: return
+        item = self.console_saved.itemData(index) or {}
+        if item.get("mode") in ("ADB", "Fastboot"): self.console_mode.setCurrentText(item["mode"])
+        self.console_command.setText(item.get("cmd", ""))
+
+    def _console_save_command(self):
+        cmd = self.console_command.text().strip()
+        if not cmd: return
+        mode = self.console_mode.currentText()
+        saved = SETTINGS.setdefault("console_saved", [])
+        if not any(s.get("cmd") == cmd and s.get("mode") == mode for s in saved):
+            saved.append({"mode": mode, "cmd": cmd}); save_settings(SETTINGS)
+        self._reload_console_saved()
+
+    def _console_delete_saved(self):
+        index = self.console_saved.currentIndex()
+        if index <= 0: return
+        item = self.console_saved.itemData(index) or {}
+        SETTINGS["console_saved"] = [s for s in SETTINGS.get("console_saved", []) if s != item]
+        save_settings(SETTINGS); self._reload_console_saved()
 
     def closeEvent(self, event):
         # Para workers antes de encerrar o servidor ADB, evitando subprocessos órfãos.
