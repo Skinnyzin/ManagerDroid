@@ -9,6 +9,8 @@
 Gerenciador de dispositivos Android para Windows, feito em Python (PySide6) sobre o **ADB**. Permite acompanhar o aparelho, gerenciar aplicativos, remover apps do sistema, espelhar a tela e executar ferramentas do dia a dia, tudo por uma interface em português ou inglês.
 
 > Não exige root. Funciona com depuração USB (ou ADB sem fio) habilitada no aparelho.
+<img width="1024" height="768" alt="Captura de Tela (5)" src="https://github.com/user-attachments/assets/de1b8caf-0ee1-4a61-90a2-3e670895df3f" />
+<img width="1024" height="768" alt="Captura de Tela (4)" src="https://github.com/user-attachments/assets/9da13fc8-008e-4a9a-aba3-5a7ac4d51c26" />
 
 ---
 
