@@ -9,6 +9,8 @@
 A Windows desktop manager for Android devices, written in Python (PySide6) on top of **ADB**. It lets you monitor the device, manage apps, remove system apps, mirror the screen and run everyday tools, with an interface in Portuguese or English.
 
 > No root required. Works with USB debugging (or wireless ADB) enabled on the phone.
+<img width="1024" height="768" alt="Captura de Tela (4)" src="https://github.com/user-attachments/assets/52569817-23ef-41ee-8056-a740d532f291" />
+<img width="1024" height="768" alt="Captura de Tela (5)" src="https://github.com/user-attachments/assets/9fe81d14-559b-47a8-8d86-068bbddb6a66" />
 
 ---
 
